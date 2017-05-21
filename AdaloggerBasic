@@ -1,0 +1,177 @@
+/* This programm creates a time log after the user used a start/stop button.
+  
+  The microprocessor is a Adafruit Feather 32u4 Adalogger
+  see also https://blog.adafruit.com/2015/11/11/new-product-adafruit-feather-32u4-adalogger/
+
+  For RTC we used a Adafruit Feather Wing RTC DS3231 
+  see also https://www.adafruit.com/product/3028
+
+  The button use pin: 5
+*/
+
+// INCLUDES:
+// *****************
+#include <Wire.h>
+//#include "RTClib.h"
+#include <DS3232RTC.h>
+#include <Time.h>
+#include <TimeLib.h>
+#include <SPI.h>
+#include <SD.h>
+
+// DEFINITIONS:
+//*****************
+File myFile;
+
+// Setup variable for SD adalogger
+#define cardSelect 4
+
+// Setup variable for timer
+int hours = 0; // start hours
+int minutes = 0; //start min
+int seconds = 0; //start seconds
+boolean stopState = 0;
+boolean startLog = 1;
+unsigned long previousMillis = 0;
+int buttonPin = 5;
+
+void setup() {
+  Serial.begin(57600);
+  setSyncProvider(RTC.get);
+  if (timeStatus() != timeSet) {
+    Serial.println("RTC Sync FAIL!");
+  }
+  if (!SD.begin(cardSelect)) {
+    Serial.println("Initialization SD failed!");
+  }
+
+  // Create file for logging
+  myFile = SD.open("datalog.txt", FILE_WRITE);
+  if (myFile) {
+    myFile.print("Start Logging sequence: ");
+    dateprint();
+    myFile.close();
+  } else {
+    Serial.println("error opening datalog.txt");
+  }
+  pinMode(buttonPin, INPUT);
+}
+
+void loop() {
+  boolean Button = digitalRead(5);
+  if (Button == 1){
+    if (startLog == 1) {
+      myFile = SD.open("datalog.txt", FILE_WRITE);
+      if (myFile) {
+        myFile.print("Time start: ");
+        dateprint();
+        myFile.close();
+      }
+      startLog = 0;
+      stopState = 1;
+    }
+    startTimer();
+  }
+
+  if (Button == 0 && stopState == 1) {
+    myFile = SD.open("datalog.txt", FILE_WRITE);
+    if (myFile) {     // logging the ellapsed time after Start was initiated by the user, to the SD file
+      myFile.print("Caretime: ");
+      logCounter();
+      myFile.print("Time stop: ");
+      dateprint();
+      myFile.println();
+      myFile.close();
+    } else {
+      // if the file didn't open, print an error:
+      Serial.println("error STOP opening datalog.txt");
+    }
+    stopState = 0;
+    startLog = 1;
+    hours = 0;    //reset hours
+    minutes = 0;  //reset min
+    seconds = 0;  //reset seconds
+  }
+}
+
+void dateprint() {
+  static time_t tLast;
+  time_t t = now();
+  myFile.print(year(t), DEC);
+  myFile.print('/');
+  myFile.print(month(t), DEC);
+  myFile.print('/');
+  myFile.print(day(t), DEC);
+  myFile.print(" ");
+  myFile.print(hour(t), DEC);
+  myFile.print(':');
+  myFile.print(minute(t), DEC);
+  myFile.print(':');
+  myFile.print(second(t), DEC);
+  myFile.println();
+}
+
+void dateserial() {
+  //Create current time label and print it to the SD card
+//  DateTime now = rtc.now();
+  static time_t tLast;
+  time_t t = now();
+  Serial.print(year(t), DEC);
+  Serial.print('/');
+  Serial.print(month(t), DEC);
+  Serial.print('/');
+  Serial.print(day(t), DEC);
+  Serial.print(" ");
+  Serial.print(hour(t), DEC);
+  Serial.print(':');
+  Serial.print(minute(t), DEC);
+  Serial.print(':');
+  Serial.print(second(t), DEC);
+  Serial.println();
+}
+
+void checklog() { // re-open the file for reading and check during programming:
+  myFile = SD.open("datalog.txt");
+  if (myFile) {
+    Serial.println("datalog.txt:");
+    while (myFile.available()) { // read from the file until there's nothing else in it:
+      Serial.write(myFile.read());
+    }
+    myFile.close();
+  }
+}
+
+void logCounter() {
+  (minutes < 10) ? myFile.print("0") : DEC;
+  myFile.print(minutes);
+  myFile.print(":");
+  (seconds < 10) ? myFile.print("0") : DEC;
+  myFile.print(seconds);
+  myFile.println();
+}
+
+void startTimer() {
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= 1000) {
+    previousMillis = currentMillis;
+    showTime();
+    if (seconds <= 59) {
+      seconds += 1;
+    }
+    if (seconds > 59) {
+      seconds = 00;
+      minutes += 1;
+    }
+  }
+}
+
+void showTime() {
+  (hours < 10 && hours > 0) ? Serial.print("0") : DEC;
+  (hours > 0) ? Serial.print(hours) : DEC;
+  (hours > 0) ? Serial.print(":") : DEC;
+  (minutes < 10) ? Serial.print("0") : DEC;
+  Serial.print(minutes);
+  Serial.print(":");
+  (seconds < 10) ? Serial.print("0") : DEC;
+  Serial.println(seconds);
+}
